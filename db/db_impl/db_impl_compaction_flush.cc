@@ -2691,9 +2691,22 @@ void DBImpl::BackgroundCallCompaction(PrepickedCompaction* prepicked_compaction,
 }
 
 class AsyncOneThread {
+public:
+  class Context {
+    std::mutex mtx;
+    std::condition_variable cond;
+    volatile bool done = false;
+    friend class AsyncOneThread;
+  public:
+    void wait() {
+      std::unique_lock<std::mutex> lock(mtx);
+      cond.wait(lock, [this]{ return this->done; });
+    }
+  };
+private:
   std::mutex m_mtx;
   std::condition_variable m_cond;
-  std::deque<std::function<void()> > m_q;
+  std::deque<std::pair<std::function<void()>, Context*> > m_q;
   volatile bool m_run = true;
   std::thread m_thr;
   void thread_proc() {
@@ -2701,18 +2714,25 @@ class AsyncOneThread {
     while (m_run) {
       std::unique_lock<std::mutex> lock(m_mtx);
       if (m_cond.wait_for(lock, timeout, [&]{ return !m_q.empty(); })) {
-        std::function<void()> func = m_q.front();
+        auto item = m_q.front();
         m_q.pop_front();
         lock.unlock();
-        func();
+        item.first();
+        item.second->done = true;
+        item.second->cond.notify_one();
       }
     }
   }
 public:
-  void enqueue(const std::function<void()>& fn) {
+  void enqueue(const std::function<void()>& fn, Context* ctx) {
     std::unique_lock<std::mutex> lock(m_mtx);
-    m_q.emplace_back(fn);
+    m_q.emplace_back(fn, ctx);
     m_cond.notify_one();
+  }
+  void wait(const std::function<void()>& fn) {
+    Context ctx;
+    enqueue(fn, &ctx);
+    ctx.wait();
   }
   AsyncOneThread() : m_thr(&AsyncOneThread::thread_proc, this) {}
   ~AsyncOneThread() {
@@ -2864,11 +2884,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     auto* mutable_cf_options = cfd->GetLatestMutableCFOptions();
     if (!mutable_cf_options->disable_auto_compactions && !cfd->IsDropped()) {
       static AsyncOneThread async;
-      std::mutex mtx;
-      std::condition_variable cond;
       auto t0 = std::chrono::steady_clock::now();
       auto t1 = t0;
-      volatile bool is_picked = false;
     auto pick = [&] { // run pick in a dedicated thread
       t1 = std::chrono::steady_clock::now();
       // NOTE: try to avoid unnecessary copy of MutableCFOptions if
@@ -2878,14 +2895,8 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       c.reset(cfd->PickCompaction(*mutable_cf_options, mutable_db_options_,
                                   log_buffer));
       TEST_SYNC_POINT("DBImpl::BackgroundCompaction():AfterPickCompaction");
-      is_picked = true;
-      cond.notify_one();
     };
-      async.enqueue(std::cref(pick));
-      {
-        std::unique_lock<std::mutex> lock(mtx);
-        cond.wait(lock, [&]{ return is_picked; });
-      }
+      async.wait(std::cref(pick));
       auto t2 = std::chrono::steady_clock::now();
       using namespace std::chrono;
       ROCKS_LOG_BUFFER(log_buffer,
