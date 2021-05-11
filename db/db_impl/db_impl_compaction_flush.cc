@@ -2815,7 +2815,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   std::unique_ptr<Status> pick_ret_status;
   mutex_.Unlock();
 auto pick = [&] { // run pick in a dedicated thread
-  MutexLock lock(&mutex_);
+  InstrumentedMutexLock lock(&mutex_);
   t1 = std::chrono::steady_clock::now();
   if (is_manual) {
     ManualCompactionState* m = manual_compaction;
