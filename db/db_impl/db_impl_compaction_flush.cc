@@ -2725,6 +2725,7 @@ private:
   }
 public:
   void enqueue(const std::function<void()>& fn, Context* ctx) {
+    assert(nullptr != ctx);
     std::unique_lock<std::mutex> lock(m_mtx);
     m_q.emplace_back(fn, ctx);
     m_cond.notify_one();
@@ -2808,6 +2809,11 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   // InternalKey manual_end_storage;
   // InternalKey* manual_end = &manual_end_storage;
   bool sfm_reserved_compact_space = false;
+  static AsyncOneThread async;
+  auto t0 = std::chrono::steady_clock::now();
+  auto t1 = t0;
+auto pick = [&] { // run pick in a dedicated thread
+  t1 = std::chrono::steady_clock::now();
   if (is_manual) {
     ManualCompactionState* m = manual_compaction;
     assert(m->in_progress);
@@ -2883,11 +2889,6 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
     // eventually be installed into SuperVersion
     auto* mutable_cf_options = cfd->GetLatestMutableCFOptions();
     if (!mutable_cf_options->disable_auto_compactions && !cfd->IsDropped()) {
-      static AsyncOneThread async;
-      auto t0 = std::chrono::steady_clock::now();
-      auto t1 = t0;
-    auto pick = [&] { // run pick in a dedicated thread
-      t1 = std::chrono::steady_clock::now();
       // NOTE: try to avoid unnecessary copy of MutableCFOptions if
       // compaction is not necessary. Need to make sure mutex is held
       // until we make a copy in the following code
@@ -2895,15 +2896,6 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       c.reset(cfd->PickCompaction(*mutable_cf_options, mutable_db_options_,
                                   log_buffer));
       TEST_SYNC_POINT("DBImpl::BackgroundCompaction():AfterPickCompaction");
-    };
-      async.wait(std::cref(pick));
-      auto t2 = std::chrono::steady_clock::now();
-      using namespace std::chrono;
-      ROCKS_LOG_BUFFER(log_buffer,
-                       "compact pick sec: wait = %.6f, run = %.6f, all = %.6f",
-                       duration_cast<microseconds>(t1-t0).count()/1e6,
-                       duration_cast<microseconds>(t2-t1).count()/1e6,
-                       duration_cast<microseconds>(t2-t0).count()/1e6);
 
       if (c != nullptr) {
         bool enough_room = EnoughRoomForCompaction(
@@ -2950,6 +2942,15 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
       }
     }
   }
+}; // end pick
+  async.wait(std::cref(pick));
+  auto t2 = std::chrono::steady_clock::now();
+  using namespace std::chrono;
+  ROCKS_LOG_BUFFER(log_buffer,
+                   "compact pick sec: wait = %.6f, run = %.6f, all = %.6f",
+                   duration_cast<microseconds>(t1-t0).count()/1e6,
+                   duration_cast<microseconds>(t2-t1).count()/1e6,
+                   duration_cast<microseconds>(t2-t0).count()/1e6);
 
   IOStatus io_s;
   if (!c) {
