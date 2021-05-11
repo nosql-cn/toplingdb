@@ -2813,7 +2813,9 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   auto t0 = std::chrono::steady_clock::now();
   auto t1 = t0;
   std::unique_ptr<Status> pick_ret_status;
+  mutex_.Unlock();
 auto pick = [&] { // run pick in a dedicated thread
+  MutexLock lock(&mutex_);
   t1 = std::chrono::steady_clock::now();
   if (is_manual) {
     ManualCompactionState* m = manual_compaction;
@@ -2948,6 +2950,7 @@ auto pick = [&] { // run pick in a dedicated thread
   }
 }; // end pick
   async.wait(std::cref(pick));
+  mutex_.Lock();
   auto t2 = std::chrono::steady_clock::now();
   using namespace std::chrono;
   ROCKS_LOG_BUFFER(log_buffer,
