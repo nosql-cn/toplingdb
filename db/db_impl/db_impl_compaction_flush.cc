@@ -2812,6 +2812,7 @@ Status DBImpl::BackgroundCompaction(bool* made_progress,
   static AsyncOneThread async;
   auto t0 = std::chrono::steady_clock::now();
   auto t1 = t0;
+  std::unique_ptr<Status> pick_ret_status;
 auto pick = [&] { // run pick in a dedicated thread
   t1 = std::chrono::steady_clock::now();
   if (is_manual) {
@@ -2860,7 +2861,8 @@ auto pick = [&] { // run pick in a dedicated thread
       // Stay in the compaction queue.
       unscheduled_compactions_++;
 
-      return Status::OK();
+      pick_ret_status.reset(new Status()); // OK
+      return;
     }
 
     auto cfd = PickCompactionFromQueue(&task_token, log_buffer);
@@ -2868,7 +2870,8 @@ auto pick = [&] { // run pick in a dedicated thread
       // Can't find any executable task from the compaction queue.
       // All tasks have been throttled by compaction thread limiter.
       ++unscheduled_compactions_;
-      return Status::Busy();
+      pick_ret_status.reset(new Status(Status::Busy()));
+      return;
     }
 
     // We unreference here because the following code will take a Ref() on
@@ -2879,7 +2882,8 @@ auto pick = [&] { // run pick in a dedicated thread
     if (cfd->UnrefAndTryDelete()) {
       // This was the last reference of the column family, so no need to
       // compact.
-      return Status::OK();
+      pick_ret_status.reset(new Status()); // OK
+      return;
     }
 
     // Pick up latest mutable CF Options and use it throughout the
@@ -2951,6 +2955,9 @@ auto pick = [&] { // run pick in a dedicated thread
                    duration_cast<microseconds>(t1-t0).count()/1e6,
                    duration_cast<microseconds>(t2-t1).count()/1e6,
                    duration_cast<microseconds>(t2-t0).count()/1e6);
+  if (pick_ret_status) {
+    return *pick_ret_status;
+  }
 
   IOStatus io_s;
   if (!c) {
