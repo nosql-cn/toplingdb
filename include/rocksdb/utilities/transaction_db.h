@@ -14,6 +14,7 @@
 #include "rocksdb/db.h"
 #include "rocksdb/utilities/stackable_db.h"
 #include "rocksdb/utilities/transaction.h"
+#include "rocksdb/utilities/write_batch_with_index.h"
 
 // Database with Transaction support.
 //
@@ -26,7 +27,7 @@ class TransactionDBMutexFactory;
 ROCKSDB_ENUM_PLAIN(TxnDBWritePolicy, int,
   WRITE_COMMITTED = 0,  // write only the committed data
   WRITE_PREPARED,  // write data after the prepare phase of 2pc
-  WRITE_UNPREPARED  // write data before the prepare phase of 2pc
+  WRITE_UNPREPARED,  // write data before the prepare phase of 2pc
 );
 
 constexpr uint32_t kInitialMaxDeadlocks = 5;
@@ -223,6 +224,9 @@ struct TransactionDBOptions {
   // this threshold, then the transaction will implicitly flush the currently
   // pending writes into the database. A value of 0 or less means no limit.
   int64_t default_write_batch_flush_threshold = 0;
+
+  // Set index factory for WriteBatchWithIndex
+  const WriteBatchEntryIndexFactory* index_type = nullptr;
 
  private:
   // 128 entries
