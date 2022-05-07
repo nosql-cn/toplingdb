@@ -226,7 +226,7 @@ struct TransactionDBOptions {
   int64_t default_write_batch_flush_threshold = 0;
 
   // Set index factory for WriteBatchWithIndex
-  const WriteBatchEntryIndexFactory* index_type = nullptr;
+  WriteBatchEntryIndexFactory* index_type = nullptr;
 
  private:
   // 128 entries
