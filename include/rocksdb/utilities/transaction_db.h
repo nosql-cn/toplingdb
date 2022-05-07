@@ -27,7 +27,7 @@ class TransactionDBMutexFactory;
 ROCKSDB_ENUM_PLAIN(TxnDBWritePolicy, int,
   WRITE_COMMITTED = 0,  // write only the committed data
   WRITE_PREPARED,  // write data after the prepare phase of 2pc
-  WRITE_UNPREPARED,  // write data before the prepare phase of 2pc
+  WRITE_UNPREPARED  // write data before the prepare phase of 2pc
 );
 
 constexpr uint32_t kInitialMaxDeadlocks = 5;
