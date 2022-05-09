@@ -319,7 +319,6 @@ Status WrapAnotherDBInternal(
           db, PessimisticTransactionDB::ValidateTxnDBOptions(txn_db_options)));
   }
   txn_db->UpdateCFComparatorMap(handles);
-
   Status s = txn_db->Initialize(compaction_enabled_cf_indices, handles);
   // In case of a failure at this point, db is deleted via the txn_db destructor
   // and set to nullptr.

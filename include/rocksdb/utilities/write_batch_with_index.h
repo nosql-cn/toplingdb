@@ -54,7 +54,7 @@ void RegistWriteBatchEntryIndexFactory(const char* name,
                                        const WriteBatchEntryIndexFactory* factory);
 // name: skiplist or other names registed
 // return nullptr if invalid name
-const WriteBatchEntryIndexFactory* GetWriteBatchEntryIndexFactory(const char* name); 
+const WriteBatchEntryIndexFactory* GetWriteBatchEntryIndexFactory(const char* name);
 
 // an entry for Put, Merge, Delete, or SingleDelete entry for write batches.
 // Used in WBWIIterator.

@@ -417,6 +417,5 @@ class WriteBatchWithIndexInternal {
   MergeContext merge_context_;
 };
 
-
 }  // namespace ROCKSDB_NAMESPACE
 #endif  // !ROCKSDB_LITE
