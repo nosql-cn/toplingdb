@@ -312,8 +312,8 @@ const Comparator* WriteBatchWithIndex::Rep::GetComparator(
     if (cf_cmp == nullptr) {
       cf_cmp = default_comparator;
     }
+    entry_indices[cf_id].comparator = cf_cmp;
   }
-  entry_indices[cf_id].comparator = cf_cmp;
   return cf_cmp;
 }
 
@@ -916,6 +916,7 @@ struct WriteBatchEntryComparator {
 
 class SkipListIndexContext : public WriteBatchEntryIndexContext {
  public:
+
   virtual void ImportMap(const map_type& _index_map) {
     index_map = _index_map;
   }
@@ -926,20 +927,25 @@ class SkipListIndexContext : public WriteBatchEntryIndexContext {
 
   virtual void FreeMapContent() {
     typedef SkipList<WriteBatchIndexEntry*, const WriteBatchEntryComparator&> Index;
-    for(auto& pairs: index_map)
-      ((Index*)pairs.second)->~Index();
+    for(auto& pairs: index_map){
+      delete ((Index*)pairs.second);
+    }
   }
 
   uint8_t* GetLastSkipListAddress(WriteBatchEntryIndex* entry_addr) {
     auto iter = index_map.find(entry_addr);
     assert(iter != index_map.end());
-    return iter->second;
+    uint8_t* addr = iter->second;
+    index_map.erase(iter);
+    return addr;
   }
 
   void RegistSkipListAddress(WriteBatchEntryIndex* entry_addr, uint8_t* skip_list_addr) {
     index_map[entry_addr] = skip_list_addr;
   }
 
+ private:
+  map_type index_map;
 };
 
 template<bool OverwriteKey>

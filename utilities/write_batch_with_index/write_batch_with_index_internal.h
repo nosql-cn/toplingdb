@@ -233,7 +233,6 @@ class WriteBatchEntryIndexContext {
   // release point when calling FreeMapContent in ~WBWI::Rep()
 
   using map_type = std::unordered_map<WriteBatchEntryIndex*, uint8_t*>;
-  map_type index_map;
   virtual void ImportMap(const map_type&) {}
   virtual void ExportMap(map_type*) {}
   virtual void FreeMapContent() {}
